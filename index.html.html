@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧版選擇權/期貨損益分析儀表板 (含儲存/匯出/AI問答功能)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc;
+        }
+        .dark body {
+            background-color: #020617;
+        }
+        .form-input, .form-select, .form-textarea {
+            @apply w-full bg-gray-100 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-black dark:text-white text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-2.5 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200;
+        }
+        .form-input:disabled {
+            @apply bg-gray-200 dark:bg-slate-900/50 cursor-not-allowed text-gray-500;
+        }
+        .card {
+            @apply bg-white dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200/50 dark:border-slate-800 rounded-2xl shadow-lg transition-all duration-300;
+        }
+        .btn-primary {
+             @apply w-full text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-800 transition-transform duration-200 hover:scale-105;
+        }
+        .btn-secondary {
+            @apply text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:focus:ring-indigo-800 font-medium rounded-lg text-sm px-4 py-2 transition-transform duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed;
+        }
+        .btn-action {
+            @apply text-slate-600 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 font-medium rounded-lg text-sm px-4 py-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+        }
+        /* Modal Styles */
+        .modal-backdrop {
+            @apply fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex justify-center items-center z-50 transition-opacity duration-300;
+        }
+        /* Loading Spinner */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="min-h-screen w-full bg-gradient-to-br from-gray-50 to-gray-200 dark:from-slate-900 dark:to-slate-950 text-slate-800 dark:text-slate-200">
+        
+        <header class="p-4 sm:p-6">
+            <div class="container mx-auto flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                     <svg class="w-8 h-8 text-blue-600 dark:text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z"/>
+                    </svg>
+                    <h1 class="text-xl md:text-2xl font-bold text-slate-900 dark:text-white">智慧版損益分析儀表板</h1>
+                </div>
+            </div>
+        </header>
+
+        <main class="container mx-auto px-4 sm:px-6 pb-8">
+            <div class="card p-6 mb-8">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">新增您的部位</h2>
+                <form id="positionForm" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
+                    <div>
+                        <label for="posType" class="block mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">類型</label>
+                        <select id="posType" class="form-select">
+                            <option value="put">賣權 (Put)</option>
+                            <option value="call">買權 (Call)</option>
+                            <option value="future">期貨</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="posSide" class="block mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">方向</label>
+                        <select id="posSide" class="form-select">
+                            <option value="long">買進 (Long)</option>
+                            <option value="short">賣出 (Short)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="posStrike" class="block mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">履約價</label>
+                        <input type="number" id="posStrike" class="form-input" placeholder="例如 23000" step="50" required>
+                    </div>
+                    <div>
+                        <label for="posPremium" class="block mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">成交價 / 權利金</label>
+                        <input type="number" id="posPremium" class="form-input" placeholder="例如 310.5" step="0.5" required>
+                    </div>
+                    <div>
+                        <label for="posQty" class="block mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">數量</label>
+                        <input type="number" id="posQty" class="form-input" value="1" min="1" required>
+                    </div>
+                    <button type="submit" class="btn-primary">新增部位</button>
+                </form>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div id="export-container" class="lg:col-span-2 flex flex-col gap-8">
+                    <div class="card p-4 sm:p-6">
+                        <h2 class="text-xl font-bold text-center text-gray-900 dark:text-white mb-4">組合損益圖表</h2>
+                        <div class="w-full h-80 sm:h-96 md:h-[500px]">
+                            <canvas id="pnlChart"></canvas>
+                        </div>
+                        <div id="infoBox" class="mt-6 text-center p-4 bg-gray-100 dark:bg-slate-800 rounded-xl">
+                            <p class="text-base font-medium text-gray-600 dark:text-gray-300">請先新增部位以生成圖表</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-8">
+                    <div class="card p-4 sm:p-6">
+                        <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">目前部位列表</h2>
+                        <div class="overflow-y-auto max-h-[200px] pr-2 mb-4">
+                            <table class="min-w-full"><tbody id="positionsTable" class="space-y-3">
+                               <tr class="text-center"><td class="py-10 text-slate-500">尚無部位</td></tr>
+                            </tbody></table>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+                           <button id="saveBtn" class="btn-action" disabled>儲存策略</button>
+                           <button id="loadBtn" class="btn-action">讀取策略</button>
+                           <button id="analyzeBtn" class="btn-secondary col-span-2" disabled>AI 分析策略</button>
+                           <button id="exportBtn" class="btn-action col-span-2" disabled>匯出 PDF</button>
+                        </div>
+                    </div>
+                    <div id="aiAnalysisCard" class="card p-4 sm:p-6">
+                         <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">AI 智慧助理 (Gemini 1.5 Flash)</h2>
+                         <div class="mb-4">
+                            <label for="apiKeyInput" class="block mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">您的 Google AI API 金鑰</label>
+                            <input type="password" id="apiKeyInput" class="form-input" placeholder="請在此貼上您的 API 金鑰">
+                            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                AI 功能需要 API 金鑰。您可以從 <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-500 hover:underline">Google AI Studio</a> 免費取得。
+                            </p>
+                        </div>
+                         <div id="aiAnalysisContent" class="text-sm text-slate-600 dark:text-slate-300 space-y-2 border-t border-slate-200 dark:border-slate-700 pt-4">
+                            <p>點擊「AI 分析策略」以分析您目前的部位組合。</p>
+                         </div>
+                         <div class="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4">
+                            <label for="aiQueryInput" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">自由提問</label>
+                            <textarea id="aiQueryInput" rows="3" class="form-textarea" placeholder="對 AI 提出任何關於市場或策略的問題..."></textarea>
+                            <button id="aiQueryBtn" class="btn-secondary w-full mt-2">送出問題</button>
+                            <div id="aiQueryResponse" class="text-sm text-slate-600 dark:text-slate-300 space-y-2 mt-4"></div>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="text-center p-6 mt-8">
+            <p class="text-sm text-slate-500 dark:text-slate-400">由 Gemini AI 提供支援。僅供模擬試算，實際交易結果請以券商帳單為準。</p>
+        </footer>
+    </div>
+    
+    <div id="loadModal" class="modal-backdrop hidden opacity-0">
+        <div class="card w-full max-w-md p-6">
+            <h3 class="text-lg font-bold mb-4">讀取已儲存的策略</h3>
+            <div id="savedList" class="max-h-60 overflow-y-auto space-y-2"></div>
+            <div class="mt-6 text-right">
+                <button id="closeModalBtn" class="btn-action">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading-overlay" class="modal-backdrop hidden">
+        <div class="loader"></div>
+        <p class="text-white text-lg mt-4">PDF 產生中...</p>
+    </div>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+        const contractMultiplier = 50;
+        const pointsPerTwd = 50;
+        let positions = [];
+        let pnlChart;
+
+        // DOM Elements
+        const posTypeSelect = document.getElementById('posType');
+        const posStrikeInput = document.getElementById('posStrike');
+        const posPremiumLabel = document.querySelector('label[for="posPremium"]');
+        const form = document.getElementById('positionForm');
+        const tableBody = document.getElementById('positionsTable');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const aiAnalysisContent = document.getElementById('aiAnalysisContent');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const saveBtn = document.getElementById('saveBtn');
+        const loadBtn = document.getElementById('loadBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const loadModal = document.getElementById('loadModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const savedListContainer = document.getElementById('savedList');
+        const aiQueryInput = document.getElementById('aiQueryInput');
+        const aiQueryBtn = document.getElementById('aiQueryBtn');
+        const aiQueryResponse = document.getElementById('aiQueryResponse');
+
+        // --- Event Listeners ---
+        posTypeSelect.addEventListener('change', () => {
+            posStrikeInput.disabled = posTypeSelect.value === 'future';
+            posStrikeInput.value = '';
+            posStrikeInput.placeholder = posTypeSelect.value === 'future' ? 'N/A' : '例如 23000';
+            posPremiumLabel.textContent = posTypeSelect.value === 'future' ? '成交價' : '權利金';
+        });
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const type = posTypeSelect.value;
+            const side = document.getElementById('posSide').value;
+            const strike = type === 'future' ? null : parseFloat(posStrikeInput.value);
+            const premium = parseFloat(document.getElementById('posPremium').value);
+            const quantity = parseInt(document.getElementById('posQty').value, 10);
+
+            if (isNaN(premium) || isNaN(quantity) || (type !== 'future' && isNaN(strike))) {
+                alert('請輸入有效的數字');
+                return;
+            }
+            positions.push({ type, side, strike, premium, quantity, id: Date.now() });
+            updateUI();
+            form.reset();
+            posTypeSelect.dispatchEvent(new Event('change'));
+        });
+
+        tableBody.addEventListener('click', (e) => {
+            const deleteButton = e.target.closest('.delete-btn');
+            if (deleteButton) {
+                const idToDelete = parseInt(deleteButton.dataset.id, 10);
+                positions = positions.filter(p => p.id !== idToDelete);
+                updateUI();
+            }
+        });
+        
+        analyzeBtn.addEventListener('click', handleAnalysisClick);
+        aiQueryBtn.addEventListener('click', handleGeneralQuery);
+        apiKeyInput.addEventListener('input', () => localStorage.setItem('geminiApiKey', apiKeyInput.value));
+        saveBtn.addEventListener('click', handleSave);
+        loadBtn.addEventListener('click', handleLoad);
+        closeModalBtn.addEventListener('click', toggleModal);
+        exportBtn.addEventListener('click', handleExportPDF);
+
+        // --- Save/Load Logic ---
+        function handleSave() {
+            const name = prompt("請為這個策略命名：", `策略_${new Date().toLocaleDateString()}`);
+            if (name && name.trim() !== "") {
+                const savedStrategies = getSavedStrategies();
+                savedStrategies[name] = positions;
+                localStorage.setItem('optionStrategies', JSON.stringify(savedStrategies));
+                alert(`策略 "${name}" 已儲存！`);
+            }
+        }
+
+        function handleLoad() {
+            const savedStrategies = getSavedStrategies();
+            savedListContainer.innerHTML = '';
+            const strategyNames = Object.keys(savedStrategies);
+
+            if (strategyNames.length === 0) {
+                savedListContainer.innerHTML = '<p class="text-slate-500">尚無已儲存的策略。</p>';
+            } else {
+                strategyNames.forEach(name => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'flex justify-between items-center p-3 bg-slate-100 dark:bg-slate-800 rounded-lg';
+                    itemDiv.innerHTML = `
+                        <span class="font-medium">${name}</span>
+                        <div>
+                            <button class="text-sm text-blue-500 hover:underline mr-4" onclick="loadStrategy('${name}')">讀取</button>
+                            <button class="text-sm text-red-500 hover:underline" onclick="deleteStrategy('${name}')">刪除</button>
+                        </div>
+                    `;
+                    savedListContainer.appendChild(itemDiv);
+                });
+            }
+            toggleModal();
+        }
+        
+        function getSavedStrategies() {
+            return JSON.parse(localStorage.getItem('optionStrategies') || '{}');
+        }
+
+        window.loadStrategy = (name) => {
+            const savedStrategies = getSavedStrategies();
+            if (savedStrategies[name]) {
+                positions = savedStrategies[name];
+                updateUI();
+                toggleModal();
+            }
+        }
+
+        window.deleteStrategy = (name) => {
+            if (confirm(`您確定要刪除策略 "${name}" 嗎？`)) {
+                const savedStrategies = getSavedStrategies();
+                delete savedStrategies[name];
+                localStorage.setItem('optionStrategies', JSON.stringify(savedStrategies));
+                handleLoad();
+            }
+        }
+
+        function toggleModal() {
+            loadModal.classList.toggle('hidden');
+            loadModal.classList.toggle('opacity-0');
+        }
+
+        // --- PDF Export Logic ---
+        async function handleExportPDF() {
+            const loadingOverlay = document.getElementById('loading-overlay');
+            loadingOverlay.classList.remove('hidden');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const contentToExport = document.getElementById('export-container');
+            const positionsCard = document.querySelector('.card:has(#positionsTable)');
+            const clonedPositionsCard = positionsCard.cloneNode(true);
+            clonedPositionsCard.id = 'temp-positions-card';
+            clonedPositionsCard.style.marginTop = '20px';
+            contentToExport.appendChild(clonedPositionsCard);
+            try {
+                const canvas = await html2canvas(contentToExport, { scale: 2, useCORS: true, backgroundColor: window.matchMedia('(prefers-color-scheme: dark)').matches ? '#020617' : '#f8fafc' });
+                const imgData = canvas.toDataURL('image/png');
+                const imgProps = pdf.getImageProperties(imgData);
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                pdf.save(`損益分析報告_${new Date().toISOString().slice(0,10)}.pdf`);
+            } catch (error) {
+                console.error("PDF export failed:", error);
+                alert("匯出 PDF 失敗，請稍後再試。");
+            } finally {
+                document.getElementById('temp-positions-card').remove();
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        // --- Gemini API Call Logic with Exponential Backoff ---
+        async function callGemini(prompt, targetElement, buttonElement) {
+            const apiKey = apiKeyInput.value;
+            if (!apiKey) {
+                targetElement.innerHTML = '<p class="text-yellow-500 font-semibold">請先在上方欄位輸入您的 Google AI API 金鑰才能進行分析。</p>';
+                return;
+            }
+
+            targetElement.innerHTML = `<div class="flex justify-center items-center py-4"><div class="loader"></div></div>`;
+            buttonElement.disabled = true;
+
+            const maxRetries = 5;
+            let delay = 1000; 
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+                    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (result.candidates && result.candidates[0]?.content?.parts[0]) {
+                            const text = result.candidates[0].content.parts[0].text;
+                            targetElement.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+                        } else {
+                            if (result.candidates && result.candidates[0]?.finishReason === 'SAFETY') {
+                                throw new Error("回應因安全設定被阻擋。");
+                            }
+                            throw new Error("API 回應格式不正確或沒有內容。");
+                        }
+                        buttonElement.disabled = false;
+                        return; 
+                    }
+
+                    if (response.status === 429) {
+                        if (i === maxRetries - 1) {
+                           throw new Error(`API 請求過於頻繁，已達到伺服器限制。請稍待幾分鐘後再試 (狀態碼 429)。`);
+                        }
+                        targetElement.innerHTML = `<div class="flex flex-col justify-center items-center py-4"><div class="loader"></div><p class="mt-2 text-sm text-yellow-500">伺服器忙碌中，將於 ${delay / 1000} 秒後重試...</p></div>`;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; 
+                    } else {
+                        if (response.status === 401) throw new Error(`API 請求失敗 (狀態碼 401): 您的 API 金鑰無效或未經授權。`);
+                        throw new Error(`API 請求失敗 (狀態碼 ${response.status})`);
+                    }
+                } catch (error) {
+                    console.error("Error calling Gemini API:", error);
+                    targetElement.innerHTML = `<p class="text-red-500 font-semibold">請求失敗。<br>錯誤訊息: ${error.message}</p>`;
+                    buttonElement.disabled = false;
+                    return; 
+                }
+            }
+        }
+
+
+        function handleAnalysisClick() {
+            if (positions.length === 0) {
+                aiAnalysisContent.innerHTML = '<p class="text-yellow-500 font-semibold">請先新增至少一個部位才能進行分析。</p>';
+                return;
+            }
+            let positionDetails = positions.map(p => {
+                const side = p.side === 'long' ? '買進' : '賣出';
+                const type = p.type === 'call' ? '買權' : (p.type === 'put' ? '賣權' : '期貨');
+                return p.type === 'future' ? `${side} ${p.quantity} 口 ${type} @ ${p.premium}` : `${side} ${p.quantity} 口 ${p.strike} ${type} @ ${p.premium}`;
+            }).join('\n');
+            const prompt = `您是一位專業的金融衍生品分析師。請根據以下台指期貨與選擇權的未平倉部位，用繁體中文提供一份簡潔、條理分明的策略分析報告。報告應包含以下幾點：\n1.  **整體策略判讀**：這是一個看漲、看跌、還是中性（如勒式、跨式、兀鷹、蝴蝶等）的策略？為什麼？\n2.  **最大風險**：這個組合的最大可能虧損是多少？在什麼情況下會發生？（如果是無限虧損，請明確指出）\n3.  **最大利潤**：這個組合的最大可能獲利是多少？在什麼情況下會發生？（如果是無限獲利，請明確指出）\n4.  **損益兩平點**：指數在結算時需要在哪個（或哪些）價位，這個組合才能打平？\n\n**目前部位:**\n${positionDetails}\n\n請以專業但易於理解的語言進行分析，並使用 Markdown 的粗體來強調關鍵術語。`;
+            
+            callGemini(prompt, aiAnalysisContent, analyzeBtn);
+        }
+
+        function handleGeneralQuery() {
+            const query = aiQueryInput.value;
+            if (!query.trim()) {
+                aiQueryResponse.innerHTML = '<p class="text-yellow-500 font-semibold">請先輸入您的問題。</p>';
+                return;
+            }
+
+            let prompt = `請以專業金融助理的身分，並使用繁體中文來回答以下問題：\n\n問題： "${query}"`;
+
+            if (positions.length > 0) {
+                let positionDetails = positions.map(p => {
+                    const side = p.side === 'long' ? '買進' : '賣出';
+                    const type = p.type === 'call' ? '買權' : (p.type === 'put' ? '賣權' : '期貨');
+                    return p.type === 'future' ? `${side} ${p.quantity} 口 ${type} @ ${p.premium}` : `${side} ${p.quantity} 口 ${p.strike} ${type} @ ${p.premium}`;
+                }).join('\n');
+                
+                prompt = `您是一位專業的金融衍生品分析師。請根據使用者當前的部位組合來回答他的問題。\n\n**使用者目前的部位組合:**\n${positionDetails}\n\n**使用者的問題是:**\n"${query}"\n\n請以繁體中文回答。`;
+            }
+            
+            callGemini(prompt, aiQueryResponse, aiQueryBtn);
+        }
+
+        // --- Calculation Functions ---
+        function calculatePnL(settlementPrice, position) {
+            let pnl = 0;
+            const price = position.premium;
+            if (position.type === 'future') pnl = position.side === 'long' ? (settlementPrice - price) : (price - settlementPrice);
+            else if (position.type === 'call') pnl = position.side === 'long' ? (Math.max(0, settlementPrice - position.strike) - price) : (price - Math.max(0, settlementPrice - position.strike));
+            else pnl = position.side === 'long' ? (Math.max(0, position.strike - settlementPrice) - price) : (price - Math.max(0, position.strike - settlementPrice));
+            return pnl * position.quantity * contractMultiplier;
+        }
+        function calculateTotalPnL(settlementPrice) {
+            return positions.reduce((total, pos) => total + calculatePnL(settlementPrice, pos), 0);
+        }
+
+        // --- UI Update Functions ---
+        function updateUI() {
+            updatePositionsTable();
+            updateChart();
+            const hasPositions = positions.length > 0;
+            analyzeBtn.disabled = !hasPositions;
+            saveBtn.disabled = !hasPositions;
+            exportBtn.disabled = !hasPositions;
+        }
+        function updatePositionsTable() {
+            tableBody.innerHTML = '';
+            if (positions.length === 0) {
+                tableBody.innerHTML = '<tr class="text-center"><td class="py-10 text-slate-500">尚無部位</td></tr>';
+                return;
+            }
+            positions.forEach(pos => {
+                const row = document.createElement('tr');
+                const sideText = pos.side === 'long' ? '買進' : '賣出';
+                const sideClass = pos.side === 'long' ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300' : 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
+                let name = pos.type === 'future' ? `期貨` : `${pos.type === 'call' ? '買權' : '賣權'} ${pos.strike}`;
+                row.innerHTML = `<td class="p-0"><div class="flex items-center justify-between p-3 bg-white dark:bg-slate-800/50 rounded-lg shadow-sm border border-transparent hover:border-blue-500 transition-all duration-200"><div><span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-md ${sideClass}">${sideText} ${pos.quantity}口</span><p class="text-sm font-semibold text-slate-700 dark:text-slate-200 mt-1">${name}</p><p class="text-xs text-slate-500 dark:text-slate-400">@ ${pos.premium}</p></div><button data-id="${pos.id}" class="delete-btn text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button></div></td>`;
+                tableBody.appendChild(row);
+            });
+        }
+        function updateChart() {
+            if (positions.length === 0) {
+                if (pnlChart) {
+                    pnlChart.data.labels = [];
+                    pnlChart.data.datasets[0].data = [];
+                    pnlChart.update();
+                }
+                document.getElementById('infoBox').innerHTML = `<p class="text-base font-medium text-gray-600 dark:text-gray-300">請先新增部位以生成圖表</p>`;
+                return;
+            }
+            const relevantPrices = positions.map(p => p.type === 'future' ? p.premium : p.strike);
+            const minPrice = Math.min(...relevantPrices);
+            const maxPrice = Math.max(...relevantPrices);
+            const range = maxPrice - minPrice;
+            const chartRange = {
+                start: Math.floor((minPrice - range * 0.5 - 500) / 100) * 100,
+                end: Math.ceil((maxPrice + range * 0.5 + 500) / 100) * 100,
+                step: 50
+            };
+            const labels = [];
+            const data = [];
+            for (let price = chartRange.start; price <= chartRange.end; price += chartRange.step) {
+                labels.push(price);
+                data.push(calculateTotalPnL(price));
+            }
+            pnlChart.data.labels = labels;
+            pnlChart.data.datasets[0].data = data;
+            pnlChart.update();
+        }
+
+        function initializeChart() {
+            const ctx = document.getElementById('pnlChart').getContext('2d');
+            const textColor = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)';
+            pnlChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{
+                    label: '總損益', data: [],
+                    borderColor: '#3b82f6', borderWidth: 2,
+                    pointRadius: 0, pointHitRadius: 10, tension: 0.2,
+                    fill: { target: 'origin', above: 'rgba(34, 197, 94, 0.1)', below: 'rgba(239, 68, 68, 0.1)' },
+                    yAxisID: 'y',
+                }]},
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: '結算價', color: textColor }, ticks: { color: textColor }, grid: { color: 'rgba(128, 128, 128, 0.1)' }},
+                        y: { type: 'linear', position: 'left', title: { display: true, text: '損益 (TWD)', color: textColor }, ticks: { callback: (v) => v.toLocaleString(), color: textColor }, grid: { color: 'rgba(128, 128, 128, 0.2)' }},
+                        y1: { type: 'linear', position: 'right', title: { display: true, text: '損益 (點)', color: textColor }, ticks: { callback: (v) => v / pointsPerTwd, color: textColor }, grid: { drawOnChartArea: false }},
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            enabled: true, mode: 'index', intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)', titleFont: { size: 14 }, bodyFont: { size: 12 },
+                            padding: 10, cornerRadius: 8,
+                            callbacks: {
+                                title: (items) => `結算價: ${items[0].label.toLocaleString()}`,
+                                label: (context) => {
+                                    const pnl = context.parsed.y;
+                                    const pnlPoints = pnl / pointsPerTwd;
+                                    document.getElementById('infoBox').innerHTML = `<div class="text-sm text-slate-600 dark:text-slate-400">結算價: <span class="font-bold text-lg text-blue-600 dark:text-blue-400">${context.label.toLocaleString()}</span></div><div class="text-sm text-slate-600 dark:text-slate-400 mt-1">預估損益: <span class="font-bold text-lg ${pnl >= 0 ? 'text-green-500' : 'text-red-500'}">${pnl.toLocaleString('en-US', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 })} (${pnlPoints.toFixed(1)} 點)</span></div>`;
+                                    return `總損益: ${pnl.toLocaleString()} TWD (${pnlPoints.toFixed(1)} 點)`;
+                                }
+                            }
+                        }
+                    },
+                    interaction: { mode: 'index', intersect: false }
+                }
+            });
+        }
+
+        window.onload = () => {
+            initializeChart();
+            posTypeSelect.dispatchEvent(new Event('change'));
+            const savedApiKey = localStorage.getItem('geminiApiKey');
+            if (savedApiKey) {
+                apiKeyInput.value = savedApiKey;
+            }
+            updateUI();
+        };
+    </script>
+</body>
+</html>
